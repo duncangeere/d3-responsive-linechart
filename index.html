@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link href='http://fonts.googleapis.com/css?family=PT+Sans' rel='stylesheet' type='text/css'>
+<link href='graph.css' rel='stylesheet' type='text/css'>
+<script src="http://d3js.org/d3.v3.js"></script>
+
+<body>
+
+	<svg id="graph"></svg>
+
+	<script>
+		// Set default size	
+		var margin = 40,
+			width = 960 - margin * 2,
+			height = 500 - margin * 2;
+
+		// Create an x time scale from 0 to width
+		var xScale = d3.time.scale()
+			.range([0, width])
+			.nice(d3.time.year); // extend by nice round numbers
+
+		// Create a linear y scale from height to 0	
+		var yScale = d3.scale.linear()
+			.range([height, 0])
+			.nice();
+
+		// Make an x axis	
+		var xAxis = d3.svg.axis()
+			.scale(xScale)
+			.orient("bottom");
+
+		// Make a y axis
+		var yAxis = d3.svg.axis()
+			.scale(yScale)
+			.orient("left");
+
+		// Create the line with date on x and closing price on y	
+		var line = d3.svg.line()
+			.x(function(d) {
+				return xScale(d.date);
+			})
+			.y(function(d) {
+				return yScale(d.close);
+			});
+
+		// Create the graph area
+		var graph = d3.select("#graph") // select the svg
+			.attr("width", width + margin * 2) //set the width
+			.attr("height", height + margin * 2) // set the height
+			.append("g") // add a group
+			// move it past the margins
+			.attr("transform", "translate(" + margin + "," + margin + ")");
+
+		// Get the data
+		d3.csv("amzn.csv", function(error, data) {
+			data.forEach(function(d) {
+				// For each data point
+				d.date = d3.time.format("%Y-%m-%d").parse(d.date); // make a date
+				d.close = +d.close; // make a number
+			});
+
+			xScale.domain(d3.extent(data, function(d) {
+				return d.date; // set domain of x scale
+			}));
+			yScale.domain(d3.extent(data, function(d) {
+				return d.close; // set domain of y scale
+			}));
+
+			graph.append("g") // Add x axis group
+				.attr("class", "x axis") // Give it a name
+				.attr("transform", "translate(0," + height + ")") // position it 
+				.call(xAxis); // Call the xAxis variable to draw it
+
+			graph.append("g") // Add y axis group
+				.attr("class", "y axis") // Give it a name
+				.call(yAxis) // Call the variable to draw it
+				.append("text") // Add a label
+				.attr("transform", "rotate(-90)") // Rotate 90 deg
+				.attr("y", 6) // Move it inward 6px
+				.attr("dy", ".71em") // Nudge it to adjust for baseline
+				.style("text-anchor", "end") // Anchor it to the end of the axis
+				.text("Price ($)"); // Text of label
+
+			dataPerPixel = data.length / width;
+			dataResampled = data.filter(
+				function(d, i) {
+					return i % Math.ceil(dataPerPixel) == 0;
+				}
+			);
+
+			graph.append("path") //Append a svg path
+				.datum(dataResampled) // Get the data
+				.attr("class", "line") // Give it a name
+				.attr("d", line); // The line variable gives the path to follow
+
+
+
+			// Add a sparkline first point
+			var firstRecord = data[data.length - 1];
+			var lastRecord = data[0];
+
+			var first = graph.append("g")
+				.attr("class", "first")
+				.style("display", "none");
+
+			first.append("text")
+				.attr("x", -8)
+				.attr("y", 4)
+				.attr("text-anchor", "end")
+				.text("$" + firstRecord.close);
+			first.append("circle")
+				.attr("r", 4);
+
+			/* ...and similar code for the end point */
+			var last = graph.append("g")
+				.attr("class", "last")
+				.style("display", "none");
+
+			last.append("text")
+				.attr("x", 8)
+				.attr("y", 4)
+				.text("$" + lastRecord.close);
+			last.append("circle")
+				.attr("r", 4);
+
+
+			function resize() {
+				/* Update graph using new width and height (code below) */
+				/* Find the new window dimensions */
+				var width = parseInt(d3.select("#graph").style("width")) - margin * 2,
+					height = parseInt(d3.select("#graph").style("height")) - margin * 2;
+
+				/* Update the range of the scale with new width/height */
+				xScale.range([0, width]).nice(d3.time.year);
+				yScale.range([height, 0]).nice();
+
+				// Specify number of ticks
+				xAxis.ticks(Math.max(width / 60, 2));
+				yAxis.ticks(Math.max(height / 50, 2));
+
+				/* Update the axes with the new scale */
+				graph.select('.x.axis')
+					.attr("transform", "translate(0," + height + ")")
+					.call(xAxis);
+				graph.select('.y.axis')
+					.call(yAxis);
+
+				// Remove axis when the window gets too small
+				if (width < 300 && height < 80) {
+					graph.select('.x.axis').style("display", "none"); // hide X axis
+					graph.select('.y.axis').style("display", "none"); // hide Y axis
+					graph.select(".first") // Add "first" sparkline point
+						.attr("transform", "translate(" + xScale(firstRecord.date) + "," + yScale(firstRecord.close) + ")")
+						.style("display", "initial");
+
+					graph.select(".last") // Add "last" sparkline point
+						.attr("transform", "translate(" + xScale(lastRecord.date) + "," + yScale(lastRecord.close) + ")")
+						.style("display", "initial");
+					
+				} else { // Then when it gets big again show axes and hide sparklines
+					graph.select('.x.axis').style("display", "initial");
+					graph.select('.y.axis').style("display", "initial");
+					graph.select(".last")
+						.style("display", "none");
+					graph.select(".first")
+						.style("display", "none");
+
+				}
+
+				/* Force D3 to recalculate and update the line */
+				graph.selectAll('.line')
+					.attr("d", line);
+			}
+
+			d3.select(window).on('resize', resize);
+
+		});
+
+	</script>
